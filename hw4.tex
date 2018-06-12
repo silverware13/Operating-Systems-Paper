@@ -1,0 +1,236 @@
+\documentclass[journal,10pt,onecolumn,letterpaper,draftclsnofoot]{IEEEtran}
+
+%Packages
+\usepackage{cite}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{amssymb}                                         
+\usepackage{amsmath}                                         
+\usepackage{amsthm}
+\usepackage{alltt}                                           
+\usepackage{float}
+\usepackage{color}
+\usepackage{url}
+\usepackage{balance}
+\usepackage[margin=0.75in]{geometry}
+
+\title{CS 444 \\ Spring 2018  \\ Project 4: The SLOB SLAB}
+\author{Zachary Thomas (thomasza),\\ Cameron Friel (frielc), Jiaji Sun (sunji)}
+\date{June 2nd, 2018}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+We explore the SLOB first-fit algorithm and implement the best-fit allocation algorithm, answer questions relating to the assignment, explain our testing methods, and lastly keep a record of our version control and work done.
+\end{abstract}
+    
+\newpage
+\tableofcontents
+\newpage
+
+\section{Design and plan}
+We will start by trying to get a better understanding of system calls. To test our best-fit
+implementation we will need a system call number. Professor McGrath pointed out that there
+are a number of reserved system call numbers, but 600 is not one of them. So we will use 600
+(I realized after planning that when we look a the table file we see all of the reserved system
+call numbers. So I ended up using the next free one which was 359).
+
+Next we will copy the slob.c file to use to implement our best-fit allocation algorithm.
+Since slob.c already handles first-fit, we can modify it to save the first-fit, but then search
+for better fits until there are no other valid options. When there are no other valid options
+it will use the current best-fit.
+
+\section{Assignment overview}
+
+\subsection{Purpose of assignment}
+This assignment is designed to help us better understand system calls and how they are implemented. Better understand SLOB, SLOB's first-fit, and how to implement best-fit.
+
+\subsection{Personal approach}
+We started by researching how system calls are implemented in Linux. Then we modified syscalls.h, syscall\_32.tbl, and the slob.c file to implement a new system call that would help us determine fragmentation. There were quite a few guides on the Internet for creating system calls in Linux, though we forgot to update our config to use slob instead of slab which caused errors when we would try to make. Eventually we found and fixed the issue.
+
+Next we worked on a test script that would use our new system call to allow us to see the memory usage of the slob. The script its self was quite simple with most of the complexity being contained in the system call its self.
+
+The last thing we worked on was editing the slob.c file to make it best-fit instead of first-fit. This was pretty straightforward. Instead of allocating when a page fit we just checked if the fit was better than our previous fit (which we tracked with a page pointer), once we had checked every possible fit then we allocated using the best fit.
+
+\subsection{Learning outcome}
+We learned how to implement a new system call, we learned how to change the SLOB first-fit algorithm to a best-fit algorithm, and we learned how to test the extent of fragmentation. 
+
+\subsection{TA evaluation instructions}
+\textbf{The following is a list of the commands used for this assignment. We have used two separate terminals. We connected via putty to os2.engr.oregonstate.edu on port 22 with both shells, both shells are bash shells. We begin with terminal one.\newline}
+
+\textbf{We will start by building a new kernel and then applying the patch file that was submitted with this assignment.\newline}
+
+\textbf{If you are using a shell other than bash you may need to add .csh to the end of the following source command.\newline}
+
+source /scratch/opt/environment-setup-i586-poky-linux\newline
+
+cd /scratch/spring2018/group38/hw4Test\newline
+
+git clone git://git.yoctoproject.org/linux-yocto-3.19\newline
+
+cd ./linux-yocto-3.19\newline
+
+git checkout v3.19.2\newline
+
+git apply /scratch/spring2018/group38/hw4.patch\newline
+
+cp /scratch/files/core-image-lsb-sdk-qemux86.ext4 ./\newline
+
+cp /scratch/files/config-3.19.2-yocto-standard ./.config\newline
+
+make menuconfig\newline
+
+\textbf{You will want to set SLOB as our allocator. To do that follow these instructions:\newline
+Scroll down to "General Setup" and hit select.\newline
+Scroll down to "Choose SLAB Allocator" and hit select.\newline
+Scroll down to "SLOB" and hit select.\newline
+Hit Exit.\newline
+Hit Exit.\newline
+When asked if you want to save your new config hit Yes.\newline
+}
+
+make -j4 all\newline
+
+\textbf{NOTE: This next command does not copy out of PDF well. Please hand type.\newline}
+
+qemu-system-i386 -gdb tcp::5599 -S -nographic -kernel arch/x86/boot/bzImage -drive file=core-image-lsb-sdk-qemux86.ext4,if=ide -enable-kvm -usb -localtime --no-reboot --append "root=/dev/hda rw console=ttyS0 debug"\newline
+
+\textbf{We are now switching to terminal two.\newline}
+
+gdb\newline
+
+target remote :5599\newline
+
+continue\newline
+
+\textbf{We are now switching to terminal one.\newline}
+
+\textbf{You will enter root as the account name. No password is required.\newline}
+
+root\newline
+
+\textbf{You should now be in the VM. At this point we want to copy over our testing script.\newline}
+
+\textbf{In the following scp command please replace "thomasza" with your user name. You will be asked to enter your password and to accept the connection.\newline}
+
+scp thomasza@os2.engr.oregonstate.edu:/scratch/spring2018/group38/testFrag.c ./\newline
+
+\textbf{Next compile.\newline}
+
+gcc -o testFrag testFrag.c\newline
+
+./testFrag\newline
+
+\textbf{The results shows how much space is being used with our best-fit algorithm.
+When we tested it we got about 65 percent of space used. To prove that our
+best-fit algorithm is working when we test the first-fit algorithm it should use more space.\newline}
+
+shutdown -r 0\newline
+
+cd mm\newline
+
+\textbf{Now we are going to replace our best-fit slob with the first-fit slob. (This should be a tiny bit quicker than reverting the patch and applying a 2nd patch file.)\newline}
+
+rm slob.o\newline
+
+y\newline
+
+\textbf{NOTE: This next command does not copy out of PDF well. Please hand type.\newline}
+
+mv slob\_first.c slob.c\newline
+
+y\newline
+
+cd ..\newline
+
+make -j4\newline
+
+\textbf{NOTE: This next command does not copy out of PDF well. Please hand type.\newline}
+
+qemu-system-i386 -gdb tcp::5599 -S -nographic -kernel arch/x86/boot/bzImage -drive file=core-image-lsb-sdk-qemux86.ext4,if=ide -enable-kvm -usb -localtime --no-reboot --append "root=/dev/hda rw console=ttyS0 debug"\newline
+
+\textbf{We are now switching to terminal two (Start with gdb if you closed terminal two for any reason).\newline}
+
+target remote :5599\newline
+
+continue\newline
+
+\textbf{We are now switching to terminal one.\newline}
+
+\textbf{You will enter root as the account name. No password is required.\newline}
+
+root\newline
+
+\textbf{You should now be in the VM.\newline}
+
+./testFrag\newline
+
+\textbf{The results shows how much space is being used with the default first-fit algorithm.
+When we tested it we got about 91 percent of space used. If the amount of space used is greater than when we used our best-fit algorithm, then we can confirm that the best-fit algorithm is working. In our case since 91 > 65 we can confirm that the algorithm is working.\newline}
+
+\section{Version control log}
+https://github.com/silverware13/Group38-CS444/tree/hw4
+\bigskip
+\centering
+\begin{tabular}{ |p{3cm}|p{10cm}|p{3cm}|  }
+ \hline
+ \multicolumn{3}{|c|}{\textbf{Version control log}} \\
+ \hline
+ \textbf{User name} &\textbf{Description} &\textbf{Date}\\
+ \hline
+ silverware13   & Started hw4   &6/2/2018\\
+ \hline
+  silverware13   & finished design plan   &6/2/2018\\
+ \hline
+   silverware13   & added a new system call to syscall\_32.tbl  &6/2/2018\\
+ \hline
+    silverware13   & updated syscalls.h  &6/2/2018\\
+ \hline
+     silverware13   & added basic print statement in system call to slob.c  &6/2/2018\\
+ \hline
+      silverware13   & got compile working with new system call  &6/2/2018\\
+ \hline
+       silverware13   & added testing script  &6/2/2018\\
+ \hline
+        silverware13   & changed test\_frag.c to a user program  &6/2/2018\\
+ \hline
+         silverware13   & updated test &6/2/2018\\
+ \hline
+          silverware13   & updated test &6/2/2018\\
+ \hline
+          silverware13   & working on system call with in slob.c &6/3/2018\\
+ \hline
+           silverware13   & improved system call &6/3/2018\\
+ \hline
+            silverware13   & changes to slob.c compile &6/3/2018\\
+ \hline
+             silverware13   & simplified test script further &6/3/2018\\
+ \hline
+              silverware13   & shows memory usage, helps find frag &6/3/2018\\
+ \hline
+               silverware13   & first attempt at best fit slob &6/3/2018\\
+ \hline
+                silverware13   & slob.c best fit try \#2 &6/3/2018\\
+ \hline
+                 silverware13   & fixed issue with loading flags too early. &6/3/2018\\
+ \hline
+\end{tabular}
+
+\section{Work log}
+
+\begin{itemize}
+\item Saturday, 6/2 Looked over project requirements and began planning.
+\item Saturday, 6/2 Wrote up the design plan.
+\item Saturday, 6/2 Added a new system call to syscall\_32.tbl.
+\item Saturday, 6/2 Updated syscalls.h.
+\item Saturday, 6/2 Added basic print statement in system call to slob.c.
+\item Saturday, 6/2 Got compile working with new system call.
+\item Saturday, 6/2 Added testing script.
+\item Saturday, 6/2 Updated testing script.
+\item Sunday, 6/3 Worked on system call.
+\item Sunday, 6/3 Finished system call. Shows space used percentage.
+\item Sunday, 6/3 Worked on slob.c.
+\item Sunday, 6/3 Finished slob.c best-fit algorithm.
+\end{itemize}
+
+\end{document}

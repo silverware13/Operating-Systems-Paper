@@ -1,0 +1,197 @@
+\documentclass[journal,10pt,onecolumn,letterpaper,draftclsnofoot]{IEEEtran}
+
+%Packages
+\usepackage{cite}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{amssymb}                                         
+\usepackage{amsmath}                                         
+\usepackage{amsthm}
+\usepackage{alltt}                                           
+\usepackage{float}
+\usepackage{color}
+\usepackage{url}
+\usepackage{balance}
+\usepackage[margin=0.75in]{geometry}
+
+\title{CS 444 \\ Spring 2018  \\ Project 3: The Kernel Crypto API}
+\author{Zachary Thomas (thomasza),\\ Cameron Friel (frielc), Jiaji Sun (sunji)}
+\date{May 18th, 2018}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+We explore the kernel crypto API, add encryption to our block device, answer questions relating to the assignment, explain our testing methods, and lastly keep a record of our version control and work done.
+\end{abstract}
+    
+\newpage
+\tableofcontents
+\newpage
+
+\section{Design and plan}
+Our plan for this assignment was to read about block devices from "Linux Device Drivers, Third Edition". Then to find a block device driver that would work on Linux 3.19. Next we figured we would need to confirm that the block device driver was being used before trying to add encrypting and decrypting via the crypto API. Next we will read the contents of the crypto folder and try to understand how to utilize the crypto API. After we have a firm understanding of the crypto API we can attempt to implement it on our device driver and then test and confirm that encryption and decryption is being handled correctly.
+
+\section{Assignment overview}
+
+\subsection{Purpose of assignment}
+The assignment really teaches two main concepts. The first part is that it helps you better understand how block devices work and how their drivers are implemented as well as used. The second part of the assignment teaches you about the Linux crypto API and challenges you to be resourceful when confronted with a lack of documentation. It also helps us further understand the kernel as a whole.
+
+\subsection{Personal approach}
+We first looked for the sbull.c driver, though it was difficult to find one that was updated from Linux 2.x to Linux 3.x. Eventually we struggled for too long trying to make it compile so we switched to finding sbd.c.
+
+After quite a while of searching we found the version of sbd.c at the following link:\newline
+http://blog.superpat.com/2010/05/04/a-simple-block-driver-for-linux-kernel-2-6-31/\newline
+Then we fixed a line that was causing issues in the file that was preventing us from compiling. At that point we had compiled our first block device driver.
+
+At that point we searched the Internet for guides on inserting, making a file system, and mounting a block device. We were able to find enough resources to confirm that our block device driver was working as intended and to establish a plan for later testing.
+
+We struggled quite a bit with using the crypto API, we looked at blowfish at first but didn't really learn much about it and didn't have any luck implementing anything with it. Looking around a bit more we looked through crypto.h and discovered a set of functions that dealt with single block ciphers which we ended up using in our final implementation of our block device driver. Trying to implement the driver was somewhat unforgiving at first and ended up with us getting stuck thinking that we were handling encryption and decryption wrong but in actuality we had made a mistake is initializing the cipher. In the end we discovered and corrected our error.
+
+\subsection{Learning outcome}
+We learned more about what defines a block device, how a block device driver is implemented on a basic level, how to insert a module, setup a file system, and mount a block device in the virtual machine. We learned how to use secure copy to copy to copy files into the virtual machine. We learned about a variety of ciphers in the crypto folder, and we learned how to use the crypto API in our code.
+
+\subsection{TA evaluation instructions}
+
+\textbf{The following is a list of the commands used for this assignment. We have used two separate terminals. We connected via putty to os2.engr.oregonstate.edu on port 22 with both shells, both shells are bash shells. We begin with terminal one.\newline}
+
+\textbf{We will start by building a new kernel and then applying the patch file that was submitted with this assignment.\newline}
+
+\textbf{If you are using a shell other than bash you may need to add .csh to the end of the following source command.\newline}
+
+source /scratch/opt/environment-setup-i586-poky-linux\newline
+
+cd /scratch/spring2018/group38/hw3Test\newline
+
+git clone git://git.yoctoproject.org/linux-yocto-3.19\newline
+
+cd ./linux-yocto-3.19\newline
+
+git checkout v3.19.2\newline
+
+git apply /scratch/spring2018/group38/hw3.patch\newline
+
+cp /scratch/files/core-image-lsb-sdk-qemux86.ext4 ./\newline
+
+cp /scratch/files/config-3.19.2-yocto-standard ./.config\newline
+
+make menuconfig\newline
+
+\textbf{You will want to set SDB to module. To do that follow these instructions:\newline
+Scroll down to "Device Drivers" and hit select.\newline
+Scroll down to "Block devices" and hit select.\newline
+Scroll down to "SBD block device driver" and hit M.\newline
+Hit Exit.\newline
+Hit Exit.\newline
+Hit Exit.\newline
+When asked if you want to save your new config hit Yes.\newline
+}
+
+make -j4 all\newline
+
+\textbf{NOTE: This next command does not copy out of PDF well. Please hand type.\newline}
+
+qemu-system-i386 -gdb tcp::5599 -S -nographic -kernel arch/x86/boot/bzImage -drive file=core-image-lsb-sdk-qemux86.ext4,if=ide -enable-kvm -usb -localtime –no-reboot –append ”root=/dev/hda rw console=ttyS0 debug”\newline
+
+\textbf{We are now switching to terminal two.\newline}
+
+gdb\newline
+
+target remote :5599\newline
+
+continue\newline
+
+\textbf{We are now switching to terminal one.\newline}
+
+\textbf{You will enter root as the account name. No password is required.\newline}
+
+root\newline
+
+\textbf{You should now be in the VM.\newline}
+
+cd ../../\newline
+
+\textbf{Next we want to get the block driver .ko file from outside of the VM.\newline}
+
+\textbf{In the following scp command please replace "thomasza" with your user name. You will be asked to enter your password and to accept the connection.\newline}
+
+scp thomasza@os2.engr.oregonstate.edu:/scratch/spring2018/group38/hw3Test/linux-yocto-3.19/drivers/block/sbd.ko ./\newline
+
+\textbf{Next we will insert the module, make the file system, and mount the block device.\newline}
+
+insmod ./sbd.ko\newline
+
+mkfs.ext2 /dev/sbd0\newline
+
+mount /dev/sbd0 /mnt\newline
+
+\textbf{Next we want to put a file onto the block device.\newline}
+
+\textbf{NOTE: This next command does not copy out of PDF well. Please hand type.\newline}
+
+echo 'This is a simple text file. Encryption check.' $>$ /mnt/textFile\newline
+
+ls /mnt\newline
+
+
+\textbf{The ls command should have shown us the textFile we just made.\newline}
+
+cat /mnt/textFile\newline
+
+\textbf{The cat should show us the contents of the textFile we just made.\newline}
+
+\textbf{Next we want to search our block device to see if we can find a word that is in our file. If we find it we know that our block device is not being encrypted.\newline}
+
+\textbf{NOTE: This next command does not copy out of PDF well. Please hand type.\newline}
+
+grep -a 'Encryption' /dev/sbd0\newline
+
+\textbf{If you do not find the word then the encryption is working.\newline}
+
+\textbf{Lastly to clean up we just want to unmount and remove the module.\newline}
+
+umount /mnt\newline
+
+rmmod sbd.ko\newline
+
+\section{Version control log}
+https://github.com/silverware13/Group38-CS444/tree/hw3
+\bigskip
+\centering
+\begin{tabular}{ |p{3cm}|p{10cm}|p{3cm}|  }
+ \hline
+ \multicolumn{3}{|c|}{\textbf{Version control log}} \\
+ \hline
+ \textbf{User name} &\textbf{Description} &\textbf{Date}\\
+ \hline
+ silverware13   & Added the sbull block driver   &5/23/2018\\
+ \hline
+  silverware13   & fixed issue with bad version of sbull. Updated drivers/block makefile.  &5/23/2018\\
+ \hline
+  silverware13   & Removed sbull, added sbd instead   &5/24/2018\\
+ \hline
+   silverware13   & Worked on adding crypto to the block device driver   &5/25/2018\\
+ \hline
+   silverware13   & compiles now. Does not insert mod though.   &5/25/2018\\
+ \hline
+   silverware13   & working on this all night.. still having issue with decryption   &5/25/2018\\
+ \hline
+ 	silverware13   & Closer, found out the seg fault like behavior is do to...   &5/26/2018\\
+ \hline
+	silverware13   & finished hw3 &5/26/2018\\
+ \hline
+\end{tabular}
+
+\section{Work log}
+
+\begin{itemize}
+\item Friday, 5/18 Looked over project requirements and began planning.
+\item Tuesday 5/22 Found an sbull 3.x block driver to use for the project.
+\item Wednesday 5/23 Figured out how to create the block driver as a module and use SCP to transfer it to the virtual machine.
+\item Thursday 5/24 Had too many issues with sbull, found a working version of sbd instead.
+\item Thursday 5/25 Started work on crypto for the block device driver.
+\item Thursday 5/25 Added some crypto functions from crypto.h that compiled. Does not run though.
+\item Thursday 5/26 Finally figured out what part of the code was causing a seg fault like behavior.
+\item Thursday 5/26 Finished Homework 3.
+\end{itemize}
+
+\end{document}

@@ -1,0 +1,178 @@
+\documentclass[journal,10pt,onecolumn,letterpaper,draftclsnofoot]{IEEEtran}
+
+%Packages
+\usepackage{cite}
+\usepackage{graphicx}
+\usepackage{amssymb}                                         
+\usepackage{amsmath}                                         
+\usepackage{amsthm}
+\usepackage{alltt}                                           
+\usepackage{float}
+\usepackage{color}
+\usepackage{url}
+\usepackage{balance}
+\usepackage[margin=0.75in]{geometry}
+
+\title{CS 444 \\ Spring 2018  \\ Project 1: Getting Acquainted}
+\author{Zachary Thomas (thomasza),\\ Cameron Friel (frielc), Jiaji Sun (sunji)}
+\date{April 8th, 2018}
+
+\begin{document}
+\maketitle
+\begin{abstract} 
+We explore the creation of a kernel, maintain a log of the commands we have used to create and build said kernel, explain the flags we use with QEMU, and lastly keep a record of our version control and work over the course of this assignment.
+\end{abstract}
+    
+\newpage
+\tableofcontents
+\newpage
+
+\section{Command log}
+The following is a list of the commands used for this assignment. We have used two separate terminals. We connected via putty to os2.engr.oregonstate.edu on port 22 with both shells, both shells are tsch shells. We begin with terminal one. 
+\begin{verbatim}
+mkdir /scratch/spring2018/group38
+
+cd /scratch/spring2018
+
+chmod u+rwx,g+rwx,o+rx group38
+
+cd group38
+
+git init
+
+git clone git://git.yoctoproject.org/linux-yocto-3.19
+
+cd linux-yocto-3.19
+
+git checkout tags/v3.19.2
+
+source /scratch/opt/environment-setup-i586-poky-linux.csh
+
+cp /scratch/files/config-3.19.2-yocto-standard .config
+
+make menuconfig
+\end{verbatim}
+Press /\newline
+Type LOCALVERSION\newline
+Press Enter\newline
+Type 1\newline
+Press Enter\newline
+Type -group38-hw1 (Replace the text in the field)\newline
+Press Enter\newline
+Press Right Arrow Key\newline
+Press Enter\newline
+Press Enter\newline
+Press Right Arrow Key\newline
+Press Enter\newline
+Press Enter\newline
+\begin{verbatim}
+cp /scratch/files/core-image-lsb-sdk-qemux86.ext4 ./
+
+cp /scratch/files/bzImage-qemux86.bin ./
+
+make -j4 all
+
+qemu-system-i386 -gdb tcp::5538 -S -nographic -kernel bzImage-qemux86.bin 
+-drive file=core-image-lsb-sdk-qemux86.ext4,if=virtio 
+-enable-kvm -net none -usb -localtime 
+--no-reboot --append "root=/dev/vda rw 
+console=ttyS0 debug"
+\end{verbatim}
+\underline{NOTE: If the previous command says that the socket is already in use please attempt tcp::5599 instead.}
+\newline
+\\
+We are now switching to terminal two.
+\begin{verbatim}
+gdb
+\end{verbatim}
+\underline{NOTE: If previously you had to use tcp::5599 due to a socket being in use please replace 5538 with 5599 in the next command.}
+\begin{verbatim}
+target remote :5538
+
+continue
+\end{verbatim}
+We are now switching to terminal one.
+\begin{verbatim}
+root
+
+uname -a
+\end{verbatim}
+The terminal shows 3.19.2-yocto-standard.
+This is the already built kernel we were given.\newline
+Now that we have tested this we are going to try to run the kernel we built.
+\begin{verbatim}
+shutdown -r now
+
+qemu-system-i386 -gdb tcp::5538 -S -nographic -kernel 
+arch/x86/boot/bzImage -drive 
+file=core-image-lsb-sdk-qemux86.ext4,if=virtio 
+-enable-kvm -net none -usb -localtime --no-reboot 
+--append "root=/dev/vda rw console=ttyS0 debug"
+\end{verbatim}
+\underline{NOTE: If the previous command says that the socket is already in use please attempt tcp::5599 instead.}
+\newline
+\\
+We are now switching to terminal two.\newline
+\\
+\underline{NOTE: If previously you had to use tcp::5599 due to a socket being in use please replace 5538 with 5599 in the next command.}
+\begin{verbatim}
+target remote :5538
+
+continue
+\end{verbatim}
+We are now switching to terminal one.
+\begin{verbatim}
+root
+
+uname -a
+\end{verbatim}
+The terminal shows 3.19.2-group38-hw1.\newline
+This is the kernel we built.\newline
+We are finished.
+
+\newpage
+\section{qemu flags}
+\begin{enumerate}
+\item -S: Do not start CPU at startup (you must type 'c' in the monitor)
+\item -nographic: Normally, if QEMU is compiled with graphical window support, it displays output such as guest graphics, guest console, and the QEMU monitor in a window. With this option, you can totally disable graphical output so that QEMU is a simple command line application. The emulated serial port is redirected on the console and muxed with the monitor (unless redirected elsewhere explicitly). Therefore, you can still use QEMU to debug a Linux kernel with a serial console. Use C-a h for help on switching between the console and monitor.
+\item -kernel bzImage: Use bzImage as kernel image. The kernel can be either a Linux kernel or in multiboot format.
+\item -drive file: emulate a virtual drive.
+\item -drive if: sets the interface type that the drive is connected to.
+\item -enable-kvm:  Enable KVM full virtualization support.
+\item -net none: Overrides the default option to make it so that no network devices are used with the emulator.
+\item -usb: Enable the USB driver.
+\item -localtime: Starts with the current local time.
+\item --no-reboot: Exit instead of rebooting. 
+\item --append: The append line adds extra options to the kernel command line, such as the root device.
+\end{enumerate}
+
+\section{Version control log}
+
+\bigskip
+\centering
+\begin{tabular}{ |p{3cm}|p{10cm}|p{3cm}|  }
+ \hline
+ \multicolumn{3}{|c|}{\textbf{Version control log}} \\
+ \hline
+ \textbf{User name} &\textbf{Description} &\textbf{Date}\\
+ \hline
+ silverware13   & initial commit    &4/13/2018\\
+ \hline
+  silverware13   & gitignored disk images    &4/13/2018\\
+ \hline
+  silverware13   & added .config    &4/13/2018\\
+ \hline
+\end{tabular}
+
+\section{Work log}
+
+\begin{itemize}
+\item Thursday, 4/5 Looked over project requirements and began planning.
+\item Satuday, 4/6  Created the group repository under scratch/Spring2018 and cloned the linux- yocto-3.19 repository.
+\item Friday, 4/7 Began write-up.
+\item Thursday, 4/12 Successfully ran qemu in debug mode with GDB.
+\item Friday, 4/13 Updated the .config file, compiled the kernel, and successfully got it to run.
+\end{itemize}
+
+
+\end{document}

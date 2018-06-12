@@ -1,0 +1,204 @@
+\documentclass[journal,10pt,onecolumn,letterpaper,draftclsnofoot]{IEEEtran}
+
+%Packages
+\usepackage{cite}
+\usepackage{graphicx}
+\usepackage{amssymb}                                         
+\usepackage{amsmath}                                         
+\usepackage{amsthm}
+\usepackage{alltt}                                           
+\usepackage{float}
+\usepackage{color}
+\usepackage{url}
+\usepackage{balance}
+\usepackage[margin=0.75in]{geometry}
+
+\title{CS 444 \\ Spring 2018  \\ Project 2: I/O Elevators}
+\author{Zachary Thomas (thomasza),\\ Cameron Friel (frielc), Jiaji Sun (sunji)}
+\date{May 1st, 2018}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+We explore I/O scheduling, implement a C-LOOK elevator, answer questions relating to the assignment, explain our testing methods, and lastly keep a record of our version control and work done.
+\end{abstract}
+    
+\newpage
+\tableofcontents
+\newpage
+
+\section{C-LOOK design}
+
+\section{Assignment overview}
+
+\subsection{Purpose of assignment}
+This assignment is designed to help us better understand I/O schedulers, how they are implemented, selected, and the differences between them.
+
+\subsection{Personal approach}
+
+We first reviewed the qemu man page to figure out what changes we needed to make to our qemu command for this assignment. We realized that the interface flag that set virtio should instead be set to ide to be able to properly use our elevator algorithm. Also we set vda in the root flag to hda. These settings make our VM act as if we are connecting a hard drive via an IDE connection.
+
+Then we copied the noop scheduler and changed the file name and function names to sstf. It seems odd that the assignment asks us to name the file sstf-iosched.c when we are implementing a C-LOOK scheduler and not a SSTF scheduler, but for consistency we refer to our scheduler as SSTF in our code.
+
+Next we went into the block directory and edited Makefile and Kconfig.iosched file to include our new I/O scheduler, after which we tested out the VM to make sure that our scheduler was able to be ran (it was still identical to the noop scheduler in functionality).
+
+At this point we created a python program that generates a ton of I/O, which would eventually allow us to test our scheduler properly. It creates files that it writes to and reads from.
+
+Before writing any code for sstf-iosched.c we read over noop-iosched.c, deadline-iosched.c, and cfq-iosched.c to better understand how to write a scheduler, as well as read more about I/O from the Linux Kernel Development book.
+
+When writing the code we had already determined that almost all of our code had to be in the sstf\textunderscore add\textunderscore request. That said reviewing sstf\textunderscore dispatch helped in writing additional code to the add function. I also had to do a bit of research to figure out that the blk\textunderscore rq\textunderscore pos function allows you to check the current sector. Also covering the list\textunderscore for\textunderscore each functions in lecture helped a lot with this assignment and helped explain how to iterate over lists in the kernel.
+
+The first thing we knew we needed to keep track of was the current sector that the read/write head occupied. In lecture we were told that we can assume that the head of the dispatch queue is the current location of the read/write head. So we update our head location every time a dispatch is made.
+
+The next trick was sorting new requests. We first check to see if we even have anything in our list, if not we don't have to sort.
+
+If we have stuff in our list we check to see if the request sector is after the current location of the read/write head. This will be what splits all of our requests in to two groups.
+
+The first group is requests that will be dispatched on the CURRENT pass of the read/write head. These are the requests that are in a sector higher than the read/write head. We sort these in ascending order.
+
+The second group is requests that will be dispatched on the NEXT pass of the read/write head. These are the requests that are in a sector lower than the read/write head. We also sort these in ascending order.
+
+So ultimately we are sorting two groups in ascending order with the read/write head bisecting them.
+
+\subsection{Solution testing}
+
+Our sstf-iosched.c file contains a constant called DEBUG\textunderscore MODE which when set to 1 prints messages showing the sector of each dispatch. When set to 2 it shows information about added requests and their sorting. When set to 0 it does not show any debugging messages.
+
+To make sure our scheduler is being run we set the scheduler with 
+the following command:
+\begin{verbatim}
+echo sstf > /sys/block/hda/queue/scheduler
+\end{verbatim}
+
+Then we check that our scheduler is being used with the command:
+\begin{verbatim}
+cat /sys/block/hda/queue/scheduler
+\end{verbatim}
+
+Next we run our python testing program to generate I/O. It creates large text files while writing and reading.
+
+At this point we see a bunch of messages showing the sector of each dispatch. The simplest way to show that our solution is correct is to use these messages to plot the sectors against time.
+
+Since we have implemented a C-LOOK scheduler our tests show ascending lists organized by sector above and below the location of the read/write head. To distinguish the two groups the debug statements show the group about to be dispatched on this pass of the read/write head as [CURRENT] and the ones to be dispatched on the next pass of the read/write head as [NEXT].
+
+We also display a queue of all of the requests yet to be dispatched each time any request is dispatched. Here is some example output:
+
+\begin{verbatim}
+[CURRENT] Sorting request for sector 1761280. Comparing to request in sector 4864
+[CURRENT] Sorting request for sector 1761280. Comparing to request in sector 37616
+[CURRENT] Sorting request for sector 1761280. Comparing to request in sector 37928
+[CURRENT] Sorting request for sector 1761280. Comparing to request in sector 3576992
+[CURRENT] Added request for sector 1761280. Head sector 4840
+Dispatched request for sector 4864
+Contents of request_queue:37616, 37928, 1761280, 3576992,
+Dispatched request for sector 37616
+Contents of request_queue:37928, 1761280, 3576992,
+Dispatched request for sector 37928
+Contents of request_queue:1761280, 3576992,
+Dispatched request for sector 1761280
+Contents of request_queue:3576992,
+Dispatched request for sector 3576992
+Contents of request_queue:
+\end{verbatim}
+
+\subsection{Learning outcome}
+
+We learned a lot about I/O schedulers in this assignment. We learned how the C-LOOK schedulers works, as well as the Deadline, and No-op scheduler since we reviewed their code. We also learned how to modify the code of the No-op scheduler to create a C-LOOK scheduler and how to select a scheduler with in the VM as well as to include a new scheduler as a selectable option.
+
+\subsection{TA evaluation instructions}
+
+To see our test in action and to see how our C-LOOK scheduler works you will need to connect to our virtual machine in the group38 folder. 
+
+This is the qemu command you will want to use:
+
+\begin{verbatim}
+qemu-system-i386 -gdb tcp::5599 -S -nographic -kernel
+arch/x86/boot/bzImage -drive file=core-image-lsb-sdk-
+qemux86.ext4,if=ide -enable-kvm -net none -usb -localtime 
+--no-reboot --append "root=/dev/hda rw console=ttyS0 debug"
+\end{verbatim}
+
+When running on the virtual machine you can use:
+
+\begin{verbatim}
+cat /sys/block/hda/queue/scheduler
+\end{verbatim}
+
+to see all available schedulers. Next you will want to select
+ours with:
+
+\begin{verbatim}
+echo sstf > /sys/block/hda/queue/scheduler
+\end{verbatim}
+
+At this point you will you need to generate a high amount of I/O to
+see our debug statements. We will use a python program that we wrote. Use the following command:
+
+\begin{verbatim}
+python hw2_test.py
+\end{verbatim}
+
+Since we have implemented a C-LOOK scheduler our tests show ascending lists organized by sector above and below the location of the read/write head. To distinguish the two groups the debug statements show the group about to be dispatched on this pass of the read/write head as [CURRENT] and the ones to be dispatched on the next pass of the read/write head as [NEXT].
+
+To evaluate the output you should be looking for contradictions to the following:
+
+\begin{enumerate}
+\item CURRENT request sectors should be above the head sector.
+\item NEXT request sectors should be below the head sector.
+\item The request queue should be in ascending order with the exception of when the head bisects the queue. In this case we should have two ascending groups. To find the head sector simply look for the last dispatched request sector.
+\end{enumerate}
+
+\section{Version control log}
+
+\bigskip
+\centering
+\begin{tabular}{ |p{3cm}|p{10cm}|p{3cm}|  }
+ \hline
+ \multicolumn{3}{|c|}{\textbf{Version control log}} \\
+ \hline
+ \textbf{User name} &\textbf{Description} &\textbf{Date}\\
+ \hline
+    silverware13   & 	copied noop implementation to create sstf-iosched.c    &5/1/2018\\
+     \hline
+    silverware13   & 	added some comments to sstf-iosched.c based on plan &5/3/2018\\
+     \hline
+    silverware13   & 	change makefile, config, and Kconfig.iosched    &5/4/2018\\
+     \hline
+    silverware13   & 	added python program to create I/O   &5/4/2018\\
+     \hline
+    silverware13   & 	updated python test    &5/4/2018\\
+     \hline
+    silverware13   & 	hw2\textunderscore test change    &5/4/2018\\
+     \hline
+    silverware13   & 	trying to better understand / test sectors and requests    &5/4/2018\\
+ \hline
+     silverware13   & 	more changes to test script    &5/4/2018\\
+ \hline
+      silverware13   & 	added code to scheduler along with pseudo code    &5/4/2018\\
+ \hline
+ silverware13   & 	improved code for scheduler, replaced some pseudo code with real code    &5/5/2018\\
+ \hline
+silverware13   & improved test and testing to fix infinite loop	&5/5/2018\\	
+ \hline
+silverware13   & test would try to fill past memory limit. fixed	&5/5/2018\\	
+ \hline
+ silverware13   & added more debug statements to try to figure out where it is getting stuck &5/5/2018\\	
+ \hline
+  silverware13   & fixed issue with freezing. was not handling requests that reached the end of list without finding their location &5/5/2018\\	
+ \hline
+\end{tabular}
+
+\section{Work log}
+
+\begin{itemize}
+\item Sunday, 4/29 Looked over project requirements and began planning.
+\item Tuesday, 5/1 Copied noop implementation to create sstf-iosched.c.
+\item Thursday, 5/3 Meet as a group to plan and further implement features.
+\item Friday, 5/4 Modified makefile, config, andKconfig.iosched to allow us to select our scheduler.
+\item Friday, 5/4 Created python test program to generate a large amount of I/O.
+\item Saturday, 5/5 Completed basic C-LOOK scheduler.
+\item Saturday, 5/5 Added debug statements to our C-LOOK scheduler.
+\item Saturday, 5/5 Completed homework 2.
+\end{itemize}
+
+\end{document}
